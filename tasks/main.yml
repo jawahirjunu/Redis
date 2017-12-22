@@ -1,0 +1,44 @@
+---
+- name: install redis deps
+  yum: name={{item}} state=present
+  with_items:
+  - make
+  - gcc
+  - wget
+  tags: redis
+
+- name: download redis source
+  shell: wget -O - http://download.redis.io/releases/redis-stable.tar.gz | tar -xz -C /tmp creates=/tmp/redis-stable
+  tags: redis_download
+
+- name: install redis
+  shell: make chdir=/tmp/redis-stable creates=/tmp/redis-stable/src/redis-server
+  tags: redis_install
+
+- name: move compiled redis binaries
+  shell: cp -f {{item}} /usr/local/bin chdir=/tmp/redis-stable/src
+  with_items:
+  - redis-cli
+  - redis-server
+  - redis-benchmark
+  tags: redis_copy_binaries
+
+- name: configure redis-server
+  template: src=redis.conf.j2 dest=/etc/redis.conf
+  notify:
+  - restart redis
+  tags: redis_configure_server
+
+- name: make redis a service
+  template: src=redis_init_script.j2 dest=/etc/init.d/redis mode=755
+  tags: redis_make_service
+
+- name: run redis
+  shell: /etc/init.d/redis start creates=/var/run/redis.pid
+  tags: redis_run
+
+- name: Add the port in firewall permanently
+  firewalld:
+    port: 6379/tcp
+    permanent:  true
+    state:  enabled
